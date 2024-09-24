@@ -1,0 +1,21 @@
+# Zig cache directories
+.zig-cache/
+zig-cache/
+
+# Build artifacts
+zig-out/
+
+# Dependency directories (if using Zigmod or Gyro)
+deps/
+gyro/
+
+# Local configuration files
+zig-cache.bin
+local.zzz
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db

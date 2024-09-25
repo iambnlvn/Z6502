@@ -32,8 +32,8 @@ pub const Bus = struct {
     pub fn read(self: *Self, addr: u16) u8 {
         return switch (addr) {
             //TODO: Implement memory mapping for other devices
-            0x0000...0xBFFF => self.sysMem.read(addr),
-            else => 0,
+            0x0000...0xFFFF => self.sysMem.read(addr),
+
             //Todo: Implement memory mapping for ROM
             // 0xC000...0xFFFF => self.readRomFromAddr(addr),
         };

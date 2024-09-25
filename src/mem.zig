@@ -38,7 +38,7 @@ pub const Ram = struct {
             std.debug.panic("Address out of bounds", .{});
         }
         std.debug.print("Writing to address: {}\n", .{address});
-        self.data[@as(u8, @intCast(address - self.startOffset))] = value;
+        self.data[address - self.startOffset] = value;
     }
 
     pub fn load(self: *Self, rom: []const u8) void {

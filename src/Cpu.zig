@@ -126,6 +126,123 @@ const CPU = struct {
         self.pc = high | low;
         self.cycles = 8;
     }
+
+    pub fn IMP(self: *CPU) u8 {
+        self.lastFetch = self.acc;
+        return 0;
+    }
+
+    pub fn IMM(self: *CPU) u8 {
+        self.absAddr = self.pc;
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+        return 0;
+    }
+
+    pub fn ZP0(self: *CPU) u8 {
+        self.absAddr = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+        self.absAddr = self.absAddr & 0x00FF;
+        return 0;
+    }
+
+    pub fn ZPX(self: *CPU) u8 {
+        self.absAddr = @addWithOverflow(self.read(self.pc), self.xReg)[0];
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+        self.absAddr = self.absAddr & 0x00FF;
+        return 0;
+    }
+
+    pub fn ZPY(self: *CPU) u8 {
+        self.absAddr = @addWithOverflow(self.read(self.pc), self.yReg)[0];
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+        self.absAddr = self.absAddr & 0x00FF;
+        return 0;
+    }
+
+    pub fn ABS(self: *CPU) u8 {
+        const low: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const high: u16 = @as(u16, @intCast(self.read(self.pc))) << 8;
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        self.absAddr = high | low;
+
+        return 0;
+    }
+
+    pub fn ABX(self: *CPU) u8 {
+        const low: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const high: u16 = @as(u16, @intCast(self.read(self.pc))) << 8;
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        self.absAddr = high | low;
+
+        self.absAddr = @addWithOverflow(self.absAddr, self.xReg)[0];
+        if (self.absAddr & 0xFF00 != high) return 1;
+
+        return 0;
+    }
+
+    pub fn ABY(self: *CPU) u8 {
+        const low: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const high: u16 = @as(u16, @intCast(self.read(self.pc))) << 8;
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        self.absAddr = high | low;
+
+        self.absAddr = @addWithOverflow(self.absAddr, self.yReg)[0];
+        if (self.absAddr & 0xFF00 != high) return 1;
+
+        return 0;
+    }
+
+    pub fn IND(self: *CPU) u8 {
+        const low: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const high: u16 = @as(u16, @intCast(self.read(self.pc))) << 8;
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const ptr: u16 = high | low;
+
+        if (low == 0x00FF) {
+            self.absAddr = (@as(u16, self.read(ptr & 0xff00)) << 8) | self.read(ptr);
+            return 0;
+        }
+
+        self.absAddr = (@as(u16, self.read(ptr + 1)) << 8) | self.read(ptr);
+        return 0;
+    }
+
+    pub fn IZX(self: *CPU) u8 {
+        const tmp: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const low: u16 = self.read((tmp + self.xReg) & 0x00FF);
+        const high: u16 = self.read((tmp + self.xReg + 1) & 0x00FF);
+
+        self.absAddr = (high << 8) | low;
+        return 0;
+    }
+
+    pub fn IZY(self: *CPU) u8 {
+        const tmp: u16 = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        const low: u16 = self.read(tmp & 0x00FF);
+        const high: u16 = self.read((tmp + 1) & 0x00FF);
+
+        self.absAddr = (high << 8) | low;
+        self.absAddr = @addWithOverflow(self.absAddr, self.yReg)[0];
+
+        if (self.absAddr & 0xFF00 != high << 8) return 1;
+        return 0;
+    }
 };
 
 test "cpu read" {
@@ -210,4 +327,151 @@ test "nmi" {
     try std.testing.expectEqual(cpu.pc, 0x7856);
 
     try std.testing.expectEqual(cpu.cycles, 8);
+}
+
+test "IMP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    try std.testing.expectEqual(cpu.IMP(), 0);
+    try std.testing.expectEqual(cpu.lastFetch, 0x12);
+}
+
+test "IMM" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    try std.testing.expectEqual(cpu.IMM(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x1234);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "ZP0" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.bus.write(0x1234, 0x56);
+    try std.testing.expectEqual(cpu.ZP0(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x56);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "ZPX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.xReg = 0x12;
+    cpu.bus.write(0x1234, 0x34);
+    try std.testing.expectEqual(cpu.ZPX(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x46);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "ZPY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.yReg = 0x12;
+    cpu.bus.write(0x1234, 0x34);
+    try std.testing.expectEqual(cpu.ZPY(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x46);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "ABS" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.bus.write(0x1234, 0x56);
+    cpu.bus.write(0x1235, 0x78);
+    try std.testing.expectEqual(cpu.ABS(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x7856);
+    try std.testing.expectEqual(cpu.pc, 0x1236);
+}
+
+test "ABX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.xReg = 0x12;
+    cpu.bus.write(0x1234, 0x56);
+    cpu.bus.write(0x1235, 0x78);
+    try std.testing.expectEqual(cpu.ABX(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x7868);
+    try std.testing.expectEqual(cpu.pc, 0x1236);
+}
+
+test "ABY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.yReg = 0x12;
+    cpu.bus.write(0x1234, 0x56);
+    cpu.bus.write(0x1235, 0x78);
+    try std.testing.expectEqual(cpu.ABY(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x7868);
+    try std.testing.expectEqual(cpu.pc, 0x1236);
+}
+test "IND" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.bus.write(0x1234, 0x56);
+    cpu.bus.write(0x1235, 0x78);
+    cpu.bus.write(0x7856, 0x12);
+    cpu.bus.write(0x7857, 0x34);
+    try std.testing.expectEqual(cpu.IND(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x3412);
+    try std.testing.expectEqual(cpu.pc, 0x1236);
+}
+
+test "IZX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.xReg = 0x12;
+    cpu.bus.write(0x1234, 0x56);
+    cpu.bus.write(0x0068, 0x12);
+    cpu.bus.write(0x0069, 0x34);
+    try std.testing.expectEqual(cpu.IZX(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x3412);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "cpu IZY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1000;
+
+    cpu.bus.write(0x1000, 0x20);
+    cpu.bus.write(0x0020, 0x34);
+    cpu.bus.write(0x0021, 0x12);
+
+    cpu.yReg = 0x10;
+
+    try std.testing.expectEqual(cpu.IZY(), 0);
+    try std.testing.expectEqual(cpu.absAddr, 0x1234 + 0x10);
+    try std.testing.expectEqual(cpu.pc, 0x1001);
 }

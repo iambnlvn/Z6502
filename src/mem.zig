@@ -37,7 +37,7 @@ pub const Ram = struct {
         if (address < self.startOffset or address > self.endOffset) {
             std.debug.panic("Address out of bounds", .{});
         }
-        std.debug.print("Writing to address: {}\n", .{address});
+
         self.data[address - self.startOffset] = value;
     }
 

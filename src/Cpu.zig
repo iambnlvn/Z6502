@@ -243,6 +243,104 @@ const CPU = struct {
         if (self.absAddr & 0xFF00 != high << 8) return 1;
         return 0;
     }
+
+    pub fn REL(self: *CPU) u8 {
+        self.relAddr = self.read(self.pc);
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        if (self.relAddr & 0x80 != 0) self.relAddr |= 0xFF00 else self.relAddr &= 0x00FF;
+
+        return 0;
+    }
+
+    pub fn BCC(self: *CPU) u8 {
+        if (self.statusReg.C) return 0;
+
+        self.cycles += 1;
+
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BCS(self: *CPU) u8 {
+        if (!self.statusReg.C) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BEQ(self: *CPU) u8 {
+        if (!self.statusReg.Z) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BMI(self: *CPU) u8 {
+        if (!self.statusReg.N) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BPL(self: *CPU) u8 {
+        if (self.statusReg.N) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BNE(self: *CPU) u8 {
+        if (self.statusReg.Z) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn BVC(self: *CPU) u8 {
+        if (self.statusReg.V) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
+    pub fn BVS(self: *CPU) u8 {
+        if (!self.statusReg.V) return 0;
+
+        self.cycles += 1;
+        self.absAddr = @addWithOverflow(self.pc, self.relAddr)[0];
+
+        if (self.absAddr & 0xFF00 != self.pc & 0xFF00) self.cycles += 1;
+        self.pc = self.absAddr;
+        return 0;
+    }
 };
 
 test "cpu read" {
@@ -474,4 +572,128 @@ test "cpu IZY" {
     try std.testing.expectEqual(cpu.IZY(), 0);
     try std.testing.expectEqual(cpu.absAddr, 0x1234 + 0x10);
     try std.testing.expectEqual(cpu.pc, 0x1001);
+}
+
+test "REL" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.bus.write(0x1234, 0x56);
+    try std.testing.expectEqual(cpu.REL(), 0);
+    try std.testing.expectEqual(cpu.relAddr, 0x56);
+    try std.testing.expectEqual(cpu.pc, 0x1235);
+}
+
+test "BCC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.C = false;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BCC(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BCS" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.C = true;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BCS(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BEQ" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.Z = true;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BEQ(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BMI" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.N = true;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BMI(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BPL" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.N = false;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BPL(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BNE" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.Z = false;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BNE(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BVC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.V = false;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BVC(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+test "BVS" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.statusReg.V = true;
+    cpu.relAddr = 0x12;
+    cpu.bus.write(0x1234, 0x12);
+    try std.testing.expectEqual(cpu.BVS(), 0);
+    try std.testing.expectEqual(cpu.pc, 0x1246);
+    try std.testing.expectEqual(cpu.cycles, 1);
 }

@@ -341,6 +341,71 @@ const CPU = struct {
         self.pc = self.absAddr;
         return 0;
     }
+
+    pub fn BRK(self: *CPU) u8 {
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+        self.statusReg.I = true;
+
+        self.write(0x0100 + @as(u16, self.sp), @truncate(self.pc >> 8));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+
+        self.write(0x0100 + @as(u16, self.sp), @truncate(self.pc));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+        self.statusReg.B = true;
+
+        self.write(0x0100 + @as(u16, self.sp), @bitCast(self.statusReg));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+        self.statusReg.B = false;
+
+        self.pc = (@as(u16, self.read(0xFFFF)) << 8) | self.read(0xFFFE);
+        std.process.exit(0);
+        return 0;
+    }
+
+    pub fn CLC(self: *CPU) u8 {
+        self.statusReg.C = false;
+        return 0;
+    }
+
+    pub fn CLD(self: *CPU) u8 {
+        self.statusReg.D = false;
+        return 0;
+    }
+
+    pub fn CLI(self: *CPU) u8 {
+        self.statusReg.I = false;
+        return 0;
+    }
+
+    pub fn CLV(self: *CPU) u8 {
+        self.statusReg.V = false;
+        return 0;
+    }
+
+    pub fn JMP(self: *CPU) u8 {
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn JSR(self: *CPU) u8 {
+        self.pc = @subWithOverflow(self.pc, 1)[0];
+
+        self.write(0x0100 + @as(u16, self.sp), @truncate(self.pc >> 8));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+
+        self.write(0x0100 + @as(u16, self.sp), @truncate(self.pc));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+
+        self.pc = self.absAddr;
+        return 0;
+    }
+
+    pub fn NOP(self: *CPU) u8 {
+        switch (self.opCode) {
+            0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC => return 1,
+            else => return 0,
+        }
+    }
 };
 
 test "cpu read" {
@@ -696,4 +761,112 @@ test "BVS" {
     try std.testing.expectEqual(cpu.BVS(), 0);
     try std.testing.expectEqual(cpu.pc, 0x1246);
     try std.testing.expectEqual(cpu.cycles, 1);
+}
+
+// TODO: this test is working but it will exit the process, figure out how to test it "Correctly"
+// test "BRK" {
+//     var allocator = std.testing.allocator;
+//     var cpu = try CPU.init(&allocator);
+//     defer cpu.bus.deinit();
+
+//     cpu.pc = 0x1234;
+//     cpu.sp = 0xFF;
+//     cpu.bus.write(0x1234, 0x00);
+//     cpu.bus.write(0x1235, 0x80);
+//     cpu.bus.write(0x8000, 0x56);
+//     cpu.bus.write(0x8001, 0x78);
+
+//     _ = cpu.BRK();
+
+//     try std.testing.expectEqual(cpu.pc, 0x7856);
+//     try std.testing.expectEqual(cpu.sp, 0xFC);
+//     try std.testing.expectEqual(cpu.statusReg.I, true);
+//     try std.testing.expectEqual(cpu.statusReg.U, true);
+//     try std.testing.expectEqual(cpu.statusReg.B, false);
+// }
+
+test "CLC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.C = true;
+    _ = cpu.CLC();
+    try std.testing.expectEqual(cpu.statusReg.C, false);
+}
+
+test "CLD" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.D = true;
+    _ = cpu.CLD();
+    try std.testing.expectEqual(cpu.statusReg.D, false);
+}
+
+test "CLI" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.I = true;
+    _ = cpu.CLI();
+    try std.testing.expectEqual(cpu.statusReg.I, false);
+}
+
+test "CLV" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.V = true;
+    _ = cpu.CLV();
+    try std.testing.expectEqual(cpu.statusReg.V, false);
+}
+
+test "JMP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.absAddr = 0x1234;
+    _ = cpu.JMP();
+    try std.testing.expectEqual(cpu.pc, 0x1234);
+}
+// TODO: Improve this test
+test "JSR" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.pc = 0x1234;
+    cpu.absAddr = 0x5678;
+    _ = cpu.JSR();
+    try std.testing.expectEqual(cpu.pc, 0x5678);
+    try std.testing.expectEqual(cpu.read(0x01FF), 51);
+}
+
+test "NOP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.opCode = 0x1C;
+    try std.testing.expectEqual(cpu.NOP(), 1);
+
+    cpu.opCode = 0x3C;
+    try std.testing.expectEqual(cpu.NOP(), 1);
+
+    cpu.opCode = 0x5C;
+    try std.testing.expectEqual(cpu.NOP(), 1);
+
+    cpu.opCode = 0x7C;
+    try std.testing.expectEqual(cpu.NOP(), 1);
+
+    cpu.opCode = 0xDC;
+    try std.testing.expectEqual(cpu.NOP(), 1);
+
+    cpu.opCode = 0xFC;
+    try std.testing.expectEqual(cpu.NOP(), 1);
 }

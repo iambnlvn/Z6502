@@ -61,9 +61,15 @@ const CPU = struct {
         self.pc = high | low;
 
         self.acc = 0;
-        self.pc = 0xFFFC;
-        self.sp = 0x01FF;
+        self.xReg = 0;
+        self.yReg = 0;
+        self.absAddr = 0;
+        self.relAddr = 0;
+        self.lastFetch = 0;
+
+        self.sp = 0xFC;
         self.statusReg.U = true;
+        self.cycles = 8;
     }
     pub fn clock(self: *CPU) void {
         if (self.cycles == 0) {
@@ -400,11 +406,59 @@ const CPU = struct {
         return 0;
     }
 
+    pub fn RTS(self: *CPU) u8 {
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.pc = self.read(0x0100 + @as(u16, self.sp));
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+
+        self.pc = self.pc | (@as(u16, self.read(0x0100 + @as(u16, self.sp))) << 8);
+
+        self.pc = @addWithOverflow(self.pc, 1)[0];
+
+        return 0;
+    }
+
     pub fn NOP(self: *CPU) u8 {
         switch (self.opCode) {
             0x1C, 0x3C, 0x5C, 0x7C, 0xDC, 0xFC => return 1,
             else => return 0,
         }
+    }
+
+    pub fn PHA(self: *CPU) u8 {
+        self.write(0x0100 + @as(u16, self.sp), self.acc);
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+        return 0;
+    }
+
+    pub fn PHP(self: *CPU) u8 {
+        self.statusReg.B = true;
+        self.statusReg.U = true;
+
+        self.write(0x0100 + @as(u16, self.sp), @bitCast(self.statusReg));
+        self.sp = @subWithOverflow(self.sp, 1)[0];
+
+        self.statusReg.B = false;
+        self.statusReg.U = false;
+        return 0;
+    }
+
+    pub fn PLA(self: *CPU) u8 {
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.acc = self.read(0x0100 + @as(u16, self.sp));
+
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+
+        return 0;
+    }
+
+    pub fn PLP(self: *CPU) u8 {
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.statusReg = @bitCast(self.read(0x0100 + @as(u16, self.sp)));
+
+        self.statusReg.U = true;
+        return 0;
     }
 };
 
@@ -427,6 +481,19 @@ test "cpu write" {
     try std.testing.expectEqual(cpu.bus.read(0x00A), 0x011);
 }
 
+test "reset" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+    cpu.write(0xFFFC, 0x00);
+    cpu.write(0xFFFD, 0x80);
+    cpu.reset();
+    try std.testing.expectEqual(cpu.pc, 128);
+    try std.testing.expectEqual(cpu.sp, 0xFC);
+    try std.testing.expectEqual(cpu.statusReg.I, false);
+    try std.testing.expectEqual(cpu.statusReg.U, true);
+    try std.testing.expectEqual(cpu.statusReg.B, false);
+}
 test "irq" {
     var allocator = std.testing.allocator;
     var cpu = try CPU.init(&allocator);
@@ -869,4 +936,74 @@ test "NOP" {
 
     cpu.opCode = 0xFC;
     try std.testing.expectEqual(cpu.NOP(), 1);
+}
+
+test "RTS" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.sp = 0xFC;
+    cpu.bus.write(0x0100 + 0xFC, 0x12);
+    cpu.bus.write(0x0100 + 0xFD, 0x34);
+    cpu.pc = 0x1234;
+    _ = cpu.RTS();
+    try std.testing.expectEqual(cpu.pc, 43573);
+}
+
+test "PHA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.sp = 0xFF;
+    _ = cpu.PHA();
+    try std.testing.expectEqual(cpu.read(0x0100 + 0xFF), 0x12);
+    try std.testing.expectEqual(cpu.sp, 0xFE);
+}
+
+test "PHP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.B = true;
+    cpu.statusReg.U = true;
+    cpu.sp = 0xFF;
+    _ = cpu.PHP();
+    try std.testing.expectEqual(cpu.read(0x0100 + 0xFF), 0x30);
+    try std.testing.expectEqual(cpu.sp, 0xFE);
+}
+
+test "PLA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+    cpu.sp = 0xFE;
+    cpu.write(0x0100 + 0xFF, 0x12);
+
+    _ = cpu.PLA();
+
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "PLP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+    cpu.sp = 0xFE;
+    cpu.write(0x0100 + 0xFF, 0x30);
+
+    _ = cpu.PLP();
+    try std.testing.expectEqual(cpu.statusReg.C, false);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.I, false);
+    try std.testing.expectEqual(cpu.statusReg.D, false);
+    try std.testing.expectEqual(cpu.statusReg.B, true);
+    try std.testing.expectEqual(cpu.statusReg.U, true);
+    try std.testing.expectEqual(cpu.statusReg.V, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
 }

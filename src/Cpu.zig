@@ -460,6 +460,95 @@ const CPU = struct {
         self.statusReg.U = true;
         return 0;
     }
+
+    pub fn RTI(self: *CPU) u8 {
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.statusReg = @bitCast(self.read(0x0100 + @as(u16, self.sp)));
+
+        self.statusReg.B = false;
+        self.statusReg.U = false;
+
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.pc = self.read(0x0100 + @as(u16, self.sp));
+
+        self.sp = @addWithOverflow(self.sp, 1)[0];
+        self.pc |= @as(u16, self.read(0x0100 + @as(u16, self.sp))) << 8;
+
+        return 0;
+    }
+
+    pub fn SEC(self: *CPU) u8 {
+        self.statusReg.C = true;
+        return 0;
+    }
+
+    pub fn SED(self: *CPU) u8 {
+        self.statusReg.D = true;
+        return 0;
+    }
+
+    pub fn SEI(self: *CPU) u8 {
+        self.statusReg.I = true;
+        return 0;
+    }
+
+    pub fn STA(self: *CPU) u8 {
+        self.write(self.absAddr, self.acc);
+        return 0;
+    }
+
+    pub fn STX(self: *CPU) u8 {
+        self.write(self.absAddr, self.xReg);
+        return 0;
+    }
+
+    pub fn STY(self: *CPU) u8 {
+        self.write(self.absAddr, self.yReg);
+        return 0;
+    }
+
+    pub fn TAX(self: *CPU) u8 {
+        self.xReg = self.acc;
+        self.statusReg.Z = self.xReg == 0;
+        self.statusReg.N = self.xReg & 0x80 != 0;
+
+        return 0;
+    }
+
+    pub fn TAY(self: *CPU) u8 {
+        self.yReg = self.acc;
+        self.statusReg.Z = self.yReg == 0;
+        self.statusReg.N = self.yReg & 0x80 != 0;
+
+        return 0;
+    }
+
+    pub fn TSX(self: *CPU) u8 {
+        self.xReg = self.sp;
+        self.statusReg.Z = self.xReg == 0;
+        self.statusReg.N = self.xReg & 0x80 != 0;
+
+        return 0;
+    }
+
+    pub fn TXS(self: *CPU) u8 {
+        self.sp = self.xReg;
+        return 0;
+    }
+
+    pub fn TXA(self: *CPU) u8 {
+        self.acc = self.xReg;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn TYA(self: *CPU) u8 {
+        self.acc = self.yReg;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+        return 0;
+    }
 };
 
 test "cpu read" {
@@ -1005,5 +1094,159 @@ test "PLP" {
     try std.testing.expectEqual(cpu.statusReg.B, true);
     try std.testing.expectEqual(cpu.statusReg.U, true);
     try std.testing.expectEqual(cpu.statusReg.V, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "RTI" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+    cpu.sp = 0xFE;
+    cpu.write(0x0100 + 0xFE, 0x30);
+    cpu.write(0x0100 + 0xFD, 0x12);
+    cpu.write(0x0100 + 0xFC, 0x34);
+
+    _ = cpu.RTI();
+    try std.testing.expectEqual(cpu.statusReg.C, false);
+    try std.testing.expectEqual(cpu.statusReg.Z, true);
+    try std.testing.expectEqual(cpu.statusReg.I, false);
+    try std.testing.expectEqual(cpu.statusReg.D, true);
+    try std.testing.expectEqual(cpu.statusReg.B, false);
+    try std.testing.expectEqual(cpu.statusReg.U, false);
+    try std.testing.expectEqual(cpu.statusReg.V, false);
+    try std.testing.expectEqual(cpu.statusReg.N, true);
+    try std.testing.expectEqual(cpu.pc, 43690);
+}
+
+test "SEC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.C = false;
+    _ = cpu.SEC();
+    try std.testing.expectEqual(cpu.statusReg.C, true);
+}
+
+test "SED" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.D = false;
+    _ = cpu.SED();
+    try std.testing.expectEqual(cpu.statusReg.D, true);
+}
+
+test "SEI" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.statusReg.I = false;
+    _ = cpu.SEI();
+    try std.testing.expectEqual(cpu.statusReg.I, true);
+}
+
+test "STA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.absAddr = 0x1234;
+    _ = cpu.STA();
+    try std.testing.expectEqual(cpu.read(0x1234), 0x12);
+}
+
+test "STX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.xReg = 0x12;
+    cpu.absAddr = 0x1234;
+    _ = cpu.STX();
+    try std.testing.expectEqual(cpu.read(0x1234), 0x12);
+}
+
+test "STY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.yReg = 0x12;
+    cpu.absAddr = 0x1234;
+    _ = cpu.STY();
+    try std.testing.expectEqual(cpu.read(0x1234), 0x12);
+}
+
+test "TAX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    _ = cpu.TAX();
+    try std.testing.expectEqual(cpu.xReg, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "TAY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    _ = cpu.TAY();
+    try std.testing.expectEqual(cpu.yReg, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "TSX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.sp = 0x12;
+    _ = cpu.TSX();
+    try std.testing.expectEqual(cpu.xReg, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "TXS" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.xReg = 0x12;
+    _ = cpu.TXS();
+    try std.testing.expectEqual(cpu.sp, 0x12);
+}
+
+test "TXA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.xReg = 0x12;
+    _ = cpu.TXA();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "TYA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.yReg = 0x12;
+    _ = cpu.TYA();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
     try std.testing.expectEqual(cpu.statusReg.N, false);
 }

@@ -550,8 +550,7 @@ const CPU = struct {
         return 0;
     }
 
-    pub fn XXX(self: *CPU) u8 {
-        _ = self;
+    pub fn XXX(_: *CPU) u8 {
         return 0;
     }
 
@@ -570,6 +569,33 @@ const CPU = struct {
         self.statusReg.N = self.acc & 0x80 != 0;
         return 1;
     }
+
+    pub fn ORA(self: *CPU) u8 {
+        _ = self.fetch();
+        self.acc |= self.lastFetch;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn JAM(_: *CPU) u8 {
+        std.debug.print("Bad instruction\n", .{});
+        std.process.exit(0);
+        return 0;
+    }
+
+    pub fn SLO(self: *CPU) u8 {
+        _ = self.fetch();
+        self.statusReg.C = self.lastFetch & 0x80 != 0;
+
+        const res: u8 = self.lastFetch << 1;
+        self.write(self.absAddr, res);
+        self.acc |= res;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 == 0x80;
+
+        return 0;
+    }
 };
 
 pub const Instruction = struct {
@@ -584,82 +610,82 @@ pub var LOOKUP: [16][4]Instruction =
     .{
     .{
         .{ .Name = "BRK", .Cycles = 7, .AddrMode = &CPU.IMP, .Operator = &CPU.BRK },
-        // .{ .Name = "ORA", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.ORA },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
-        // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.SLO },
+        // .{ .Name = "ORA", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.ORA }, Implemented
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
+        // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.NOP },
         // .{ .Name = "ORA", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ORA },
         // .{ .Name = "ASL", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ASL },
-        // .{ .Name = "SLO", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.SLO },
+        // .{ .Name = "SLO", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "PHP", .Cycles = 3, .AddrMode = &CPU.IMP, .Operator = &CPU.PHP },
-        // .{ .Name = "ORA", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ORA },
+        // .{ .Name = "ORA", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ORA }, Implemented
         // .{ .Name = "ASL", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ASL },
         // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABS },
         // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.ORA },
         // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ASL },
-        // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.SLO },
+        // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.SLO }, Implemented
     },
     .{
         // .{ .Name = "BPL", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BPL }, // Implemented
-        // .{ .Name = "ORA", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.ORA },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
-        // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.SLO },
+        // .{ .Name = "ORA", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.ORA }, // Implemented
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
+        // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
-        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ORA },
+        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ORA }, // Implemented
         // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ASL },
-        // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.SLO },
+        // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "CLC", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.CLC },
-        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.ORA },
+        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.ORA }, // Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
-        // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.SLO },
+        // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
-        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.ORA },
+        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.ORA }, // Implemented
         // .{ .Name = "ASL", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ASL },
-        // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.SLO },
+        // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.SLO }, Implemented
     },
     .{
         .{ .Name = "JSR", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.JSR },
-        // .{ .Name = "AND", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.AND },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "AND", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.AND }, // Implemented
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RLA", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.RLA },
         // .{ .Name = "BIT", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.BIT },
-        // .{ .Name = "AND", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ROL },
         // .{ .Name = "RLA", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.RLA },
         .{ .Name = "PLP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.PLP },
         .{ .Name = "PLP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.PLP }, // dup
         .{ .Name = "PLP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.PLP }, //dup
-        // .{ .Name = "AND", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ROL },
         // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC },
         // .{ .Name = "BIT", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.BIT },
-        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ROL },
         // .{ .Name = "RLA", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.RLA },
     },
     .{
         // .{ .Name = "BMI", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BMI }, // Implemented
-        // .{ .Name = "AND", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.AND },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "AND", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.AND }, // Implemented
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RLA", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.RLA },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
-        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ROL },
         // .{ .Name = "RLA", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.RLA },
         .{ .Name = "SEC", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.SEC },
-        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.AND }, // Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
         // .{ .Name = "RLA", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.RLA },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
-        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.AND },
+        // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ROL },
         // .{ .Name = "RLA", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.RLA },
     },
     .{
         .{ .Name = "RTI", .Cycles = 6, .AddrMode = &CPU.IMP, .Operator = &CPU.RTI },
         // .{ .Name = "EOR", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.EOR },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "SRE", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.SRE },
         .{ .Name = "NOP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.NOP },
         // .{ .Name = "EOR", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.EOR },
@@ -677,7 +703,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BVC", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BVC }, // implemented
         // .{ .Name = "EOR", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.EOR },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "SRE", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.SRE },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "EOR", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.EOR },
@@ -695,7 +721,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         .{ .Name = "RTS", .Cycles = 6, .AddrMode = &CPU.IMP, .Operator = &CPU.RTS },
         // .{ .Name = "ADC", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.ADC },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RRA", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.RRA },
         .{ .Name = "NOP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.NOP },
         // .{ .Name = "ADC", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ADC },
@@ -713,7 +739,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BVS", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BVS }, // implemented
         // .{ .Name = "ADC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.ADC },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RRA", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.RRA },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ADC },
@@ -749,7 +775,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BCC", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BCC }, // implemented
         // .{ .Name = "STA", .Cycles = 6, .AddrMode = &CPU.IZY, .Operator = &CPU.STA }, // implemented
-        // // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // // .{ .Name = "SHA", .Cycles = 6, .AddrMode = &CPU.IZY, .Operator = &CPU.SHA },
         // .{ .Name = "STY", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.STY }, // implemented
         // .{ .Name = "STA", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.STA }, // implemented
@@ -787,7 +813,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BCS", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BCS },
         // .{ .Name = "LDA", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.LDA },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "LAX", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.LAX },
         // .{ .Name = "LDY", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.LDY },
         // .{ .Name = "LDA", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.LDA },
@@ -828,7 +854,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BNE", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BNE }, // Implemented
         // .{ .Name = "CMP", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.CMP },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "DCP", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.DCP },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "CMP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.CMP },
@@ -866,7 +892,7 @@ pub var LOOKUP: [16][4]Instruction =
     .{
         // .{ .Name = "BEQ", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BEQ }, // IMPLEMENTED
         // .{ .Name = "SBC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.SBC },
-        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM },
+        // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "ISC", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.ISC },
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.SBC },
@@ -1613,3 +1639,32 @@ test "TYA" {
 //     try std.testing.expectEqual(cpu.statusReg.Z, false);
 //     try std.testing.expectEqual(cpu.statusReg.N, false);
 // }
+
+//NOTE: instructions depending on the fetch method seem to be working fine, but not AND
+test "ORA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.ORA();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "SLO" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.SLO();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}

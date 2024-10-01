@@ -554,6 +554,22 @@ const CPU = struct {
         _ = self;
         return 0;
     }
+
+    pub fn fetch(self: *CPU) u8 {
+        if (LOOKUP[self.opCode >> 4][self.opCode & 0x0F].AddrMode != &CPU.IMP) {
+            self.lastFetch = self.read(self.absAddr);
+        }
+        std.debug.print("Fetch: {}\n", .{self.lastFetch});
+        return self.lastFetch;
+    }
+
+    pub fn AND(self: *CPU) u8 {
+        _ = self.fetch();
+        self.acc &= self.lastFetch;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+        return 1;
+    }
 };
 
 pub const Instruction = struct {
@@ -1566,3 +1582,34 @@ test "TYA" {
     try std.testing.expectEqual(cpu.statusReg.Z, false);
     try std.testing.expectEqual(cpu.statusReg.N, false);
 }
+
+//TODO!:FIX these 2 tests, I'm not sure if this is the correct way to test them
+// test "cpu fetch" {
+//     var allocator = std.testing.allocator;
+//     var cpu = try CPU.init(&allocator);
+//     defer cpu.bus.deinit();
+
+//     cpu.write(0x8000, 0xA9); // LDA Immediate
+//     cpu.write(0x8001, 0x42); // Value to load
+//     cpu.pc = 0x8000;
+
+//     _ = cpu.clock(); // Fetch opcode
+//     _ = cpu.IMM(); // Set addressing mode
+//     const value = cpu.fetch();
+
+//     try std.testing.expectEqual(value, 0x42);
+// }
+
+// test "AND" {
+//     var allocator = std.testing.allocator;
+//     var cpu = try CPU.init(&allocator);
+//     defer cpu.bus.deinit();
+
+//     cpu.acc = 0x12;
+//     cpu.write(0x1234, 0x34);
+//     _ = cpu.ABS();
+//     _ = cpu.AND();
+//     try std.testing.expectEqual(cpu.acc, 0x12 & 0x34);
+//     try std.testing.expectEqual(cpu.statusReg.Z, false);
+//     try std.testing.expectEqual(cpu.statusReg.N, false);
+// }

@@ -558,7 +558,6 @@ const CPU = struct {
         if (LOOKUP[self.opCode >> 4][self.opCode & 0x0F].AddrMode != &CPU.IMP) {
             self.lastFetch = self.read(self.absAddr);
         }
-        std.debug.print("Fetch: {}\n", .{self.lastFetch});
         return self.lastFetch;
     }
 
@@ -596,6 +595,63 @@ const CPU = struct {
 
         return 0;
     }
+
+    pub fn ASL(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const tmp: u8 = self.lastFetch << 1;
+
+        self.statusReg.C = self.lastFetch & 0x80 != 0;
+        self.statusReg.Z = tmp == 0;
+        self.statusReg.N = tmp & 0x80 != 0;
+
+        if (LOOKUP[(self.opCode >> 4) & 0x0F][self.opCode & 0x0F].AddrMode == &CPU.IMP) {
+            self.acc = tmp;
+            return 0;
+        } else {
+            self.write(self.absAddr, tmp);
+            return 0;
+        }
+    }
+
+    pub fn ANC(self: *CPU) u8 {
+        _ = self.fetch();
+
+        self.acc &= self.lastFetch;
+        self.statusReg.C = self.acc & 0x80 == 0x80;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 == 0x80;
+        return 0;
+    }
+
+    pub fn RLA(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const tmp: u16 = self.lastFetch << 1 | @as(u16, @intFromBool(self.statusReg.C));
+        self.write(self.absAddr, @truncate(tmp));
+
+        self.acc &= @truncate(tmp);
+
+        self.statusReg.C = self.lastFetch & 0x80 != 0;
+        self.statusReg.Z = self.acc == 0;
+        self.statusReg.N = self.acc & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn RRA(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const tmp: u16 = (@as(u16, @intFromBool(self.statusReg.C)) << 7) | (self.lastFetch >> 1);
+        self.statusReg.C = self.lastFetch & 1 == 1;
+
+        const res = @as(u16, self.acc) + (tmp & 0x00FF) + @as(u16, @intFromBool(self.statusReg.C));
+        self.statusReg.C = res & 0xFF00 != 0;
+        self.statusReg.Z = res & 0x00FF == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        self.statusReg.V = ((~(self.clockCount ^ (tmp & 0x00ff)) & (self.acc ^ (res & 0x00ff))) & 0x80) != 0;
+        self.acc = @truncate(res);
+        return 0;
+    }
 };
 
 pub const Instruction = struct {
@@ -614,16 +670,16 @@ pub var LOOKUP: [16][4]Instruction =
         // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.NOP },
-        // .{ .Name = "ORA", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ORA },
-        // .{ .Name = "ASL", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ASL },
+        // .{ .Name = "ORA", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ORA }, Implemented
+        // .{ .Name = "ASL", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ASL }, Implemented
         // .{ .Name = "SLO", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "PHP", .Cycles = 3, .AddrMode = &CPU.IMP, .Operator = &CPU.PHP },
         // .{ .Name = "ORA", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ORA }, Implemented
-        // .{ .Name = "ASL", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ASL },
-        // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC },
+        // .{ .Name = "ASL", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ASL }, Implemented
+        // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABS },
-        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.ORA },
-        // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ASL },
+        // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.ORA }, Implemented
+        // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ASL }, Implemented
         // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.SLO }, Implemented
     },
     .{
@@ -633,7 +689,7 @@ pub var LOOKUP: [16][4]Instruction =
         // .{ .Name = "SLO", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ORA }, // Implemented
-        // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ASL },
+        // .{ .Name = "ASL", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ASL }, Implemented
         // .{ .Name = "SLO", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "CLC", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.CLC },
         // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.ORA }, // Implemented
@@ -641,7 +697,7 @@ pub var LOOKUP: [16][4]Instruction =
         // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.SLO }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
         // .{ .Name = "ORA", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.ORA }, // Implemented
-        // .{ .Name = "ASL", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ASL },
+        // .{ .Name = "ASL", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ASL }, Implemented
         // .{ .Name = "SLO", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.SLO }, Implemented
     },
     .{
@@ -658,7 +714,7 @@ pub var LOOKUP: [16][4]Instruction =
         .{ .Name = "PLP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.PLP }, //dup
         // .{ .Name = "AND", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ROL },
-        // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC },
+        // .{ .Name = "ANC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ANC }, Implemented
         // .{ .Name = "BIT", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.BIT },
         // .{ .Name = "AND", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.AND }, // Implemented
         // .{ .Name = "ROL", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ROL },
@@ -1666,5 +1722,33 @@ test "SLO" {
     _ = cpu.SLO();
     try std.testing.expectEqual(cpu.acc, 0x12);
     try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "RRA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.RRA();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "RLA" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.RLA();
+    try std.testing.expectEqual(cpu.acc, 0);
+    try std.testing.expectEqual(cpu.statusReg.Z, true);
     try std.testing.expectEqual(cpu.statusReg.N, false);
 }

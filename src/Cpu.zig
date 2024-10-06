@@ -880,6 +880,117 @@ const CPU = struct {
         self.statusReg.N = res & 0x0080 != 0;
         return 0;
     }
+
+    pub fn DCP(self: *CPU) u8 {
+        _ = self.fetch();
+        const res = @subWithOverflow(self.lastFetch, 1);
+        self.write(self.absAddr, res[0]);
+        const cmp: u8 = @subWithOverflow(self.acc, res[0])[0];
+
+        self.statusReg.C = self.acc >= res[0] or res[1] == 1;
+        self.statusReg.Z = cmp == 0;
+        self.statusReg.N = cmp & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn DEC(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const res: u8 = @subWithOverflow(self.lastFetch, 1)[0];
+        self.write(self.absAddr, res);
+        self.statusReg.Z = res == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn INX(self: *CPU) u8 {
+        self.xReg = @addWithOverflow(self.xReg, 1)[0];
+        self.statusReg.Z = self.xReg == 0;
+        self.statusReg.N = self.xReg & 0x80 != 0;
+        return 0;
+    }
+    pub fn INY(self: *CPU) u8 {
+        self.yReg = @addWithOverflow(self.yReg, 1)[0];
+        self.statusReg.Z = self.yReg == 0;
+        self.statusReg.N = self.yReg & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn SBX(self: *CPU) u8 {
+        _ = self.fetch();
+        const res: u16 = @as(u16, @intCast(self.acc & self.xReg)) + ~(@addWithOverflow(self.lastFetch, 1)[0]);
+
+        self.xReg = @truncate(res);
+
+        self.statusReg.C = res > 0xff;
+        self.statusReg.Z = self.xReg == 0;
+        self.statusReg.N = self.xReg & 0x80 == 0x80;
+        return 0;
+    }
+
+    pub fn SBC(self: *CPU) u8 {
+        _ = self.fetch();
+        const val: u16 = @as(u16, self.lastFetch) ^ 0x00FF;
+
+        const tmp: u16 = @as(u16, self.acc) + val + @as(u16, @intFromBool(self.statusReg.C));
+        const res: u8 = @truncate(tmp);
+
+        self.statusReg.C = tmp & 0xFF00 != 0;
+        self.statusReg.Z = res == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        self.statusReg.V = ((tmp ^ self.acc) & (tmp ^ val) & 0x80) != 0;
+
+        self.acc = res;
+        return 1;
+    }
+
+    pub fn ISC(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const inc: u8 = @addWithOverflow(self.lastFetch, 1)[0];
+        self.write(self.absAddr, inc);
+
+        const val: u16 = @as(u16, inc) ^ 0x00FF;
+
+        const tmp: u16 = @as(u16, self.acc) + val + @as(u16, @intFromBool(self.statusReg.C));
+        const res: u8 = @truncate(tmp);
+
+        self.statusReg.C = tmp & 0xFF00 != 0;
+        self.statusReg.Z = res == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        self.statusReg.V = ((tmp ^ self.acc) & (tmp ^ val) & 0x80) != 0;
+        self.acc = res;
+
+        return 0;
+    }
+
+    pub fn INC(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const res: u8 = @addWithOverflow(self.lastFetch, 1)[0];
+        self.write(self.absAddr, res);
+
+        self.statusReg.Z = res == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        return 0;
+    }
+
+    pub fn USB(self: *CPU) u8 {
+        _ = self.fetch();
+
+        const val: u16 = @as(u16, self.lastFetch) ^ 0x00FF;
+        const tmp: u16 = @as(u16, self.acc) + val + @as(u16, @intFromBool(self.statusReg.C));
+
+        const res: u8 = @truncate(tmp);
+
+        self.statusReg.C = tmp & 0xff00 != 0;
+        self.statusReg.Z = res == 0;
+        self.statusReg.N = res & 0x80 != 0;
+        self.statusReg.V = ((tmp ^ self.acc) & (tmp ^ val) & 0x80) != 0;
+
+        self.acc = res;
+        return 0;
+    }
 };
 
 pub const Instruction = struct {
@@ -1004,37 +1115,37 @@ pub var LOOKUP: [16][4]Instruction =
     },
     .{
         .{ .Name = "RTS", .Cycles = 6, .AddrMode = &CPU.IMP, .Operator = &CPU.RTS },
-        // .{ .Name = "ADC", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RRA", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.RRA}, Implemented
         .{ .Name = "NOP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.NOP },
-        // .{ .Name = "ADC", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "ROR", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ROR, Implemented
         // .{ .Name = "RRA", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.RRA}, Implemented
         .{ .Name = "PLA", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.PLA },
-        // .{ .Name = "ADC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "ROR", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.ROR, Implemented
         // .{ .Name = "ARR", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.ARR }, Implemented
         .{ .Name = "JMP", .Cycles = 5, .AddrMode = &CPU.IND, .Operator = &CPU.JMP },
-        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "ROR", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ROR, Implemented
         // .{ .Name = "RRA", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.RRA}, Implemented
     },
     .{
         // .{ .Name = "BVS", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BVS }, // implemented
-        // .{ .Name = "ADC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
         // .{ .Name = "RRA", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.RRA}, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
-        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "ROR", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ROR, Implemented
         // .{ .Name = "RRA", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.RRA}, Implemented
         .{ .Name = "SEI", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.SEI },
-        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.ADC }, Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
         // .{ .Name = "RRA", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.RRA}, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
-        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.ADC, Implemented
+        // .{ .Name = "ADC", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.ADC }, Implemented
         // .{ .Name = "ROR", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ROR, Implemented
         // .{ .Name = "RRA", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.RRA}, Implemented
     },
@@ -1121,75 +1232,75 @@ pub var LOOKUP: [16][4]Instruction =
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.NOP }, // DUP
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.NOP }, // DUP
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.NOP }, // DUP
-        // .{ .Name = "DCP", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.DCP },
+        // .{ .Name = "DCP", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.DCP }, Implemented
         // .{ .Name = "CPY", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.CPY }, Implemented
         // .{ .Name = "CMP", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.CMP }, Implemented
-        // .{ .Name = "DEC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.DEC },
-        // .{ .Name = "DCP", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.DCP },
-        // .{ .Name = "INY", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.INY },
+        // .{ .Name = "DEC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.DEC }, Implemented
+        // .{ .Name = "DCP", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.DCP }, Implemented
+        // .{ .Name = "INY", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.INY }, Implemented Implemented
         // .{ .Name = "CMP", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.CMP }, Implemented
         // .{ .Name = "DEX", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.DEX }, Implemented
-        // .{ .Name = "SBX", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.SBX },
+        // .{ .Name = "SBX", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.SBX }, Implemented
         // .{ .Name = "CPY", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.CPY }, Implemented
         // .{ .Name = "CMP", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.CMP }, Implemented
-        // .{ .Name = "DEC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.DEC },
-        // .{ .Name = "DCP", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.DCP },
+        // .{ .Name = "DEC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.DEC }, Implemented
+        // .{ .Name = "DCP", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.DCP }, Implemented
     },
     .{
         // .{ .Name = "BNE", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BNE }, // Implemented
         // .{ .Name = "CMP", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.CMP }, Implemented
         // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
-        // .{ .Name = "DCP", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.DCP },
+        // .{ .Name = "DCP", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.DCP }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
         // .{ .Name = "CMP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.CMP }, Implemented
-        // .{ .Name = "DEC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.DEC },
-        // .{ .Name = "DCP", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.DCP },
+        // .{ .Name = "DEC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.DEC }, Implemented
+        // .{ .Name = "DCP", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.DCP }, Implemented
         .{ .Name = "CLD", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.CLD },
         // .{ .Name = "CMP", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.CMP }, Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
-        // .{ .Name = "DCP", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.DCP },
+        // .{ .Name = "DCP", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.DCP }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
         // .{ .Name = "CMP", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.CMP }, Implemented
-        // .{ .Name = "DEC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.DEC },
-        // .{ .Name = "DCP", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.DCP },
+        // .{ .Name = "DEC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.DEC }, Implemented
+        // .{ .Name = "DCP", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.DCP }, Implemented
     },
     .{
         // .{ .Name = "CPX", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.CPX }, Implemented
-        // .{ .Name = "SBC", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.SBC },
+        // .{ .Name = "SBC", .Cycles = 6, .AddrMode = &CPU.IZX, .Operator = &CPU.SBC }, Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.NOP },
-        // .{ .Name = "ISC", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.ISC },
+        // .{ .Name = "ISC", .Cycles = 8, .AddrMode = &CPU.IZX, .Operator = &CPU.ISC }, Implemented
         // .{ .Name = "CPX", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.CPX }, Implemented
-        // .{ .Name = "SBC", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.SBC },
-        // .{ .Name = "INC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.INC },
-        // .{ .Name = "ISC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ISC },
-        // .{ .Name = "INX", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.INX },
-        // .{ .Name = "SBC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.SBC },
+        // .{ .Name = "SBC", .Cycles = 3, .AddrMode = &CPU.ZP0, .Operator = &CPU.SBC }, Implemented
+        // .{ .Name = "INC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.INC }, Implemented
+        // .{ .Name = "ISC", .Cycles = 5, .AddrMode = &CPU.ZP0, .Operator = &CPU.ISC }, Implemented
+        // .{ .Name = "INX", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.INX }, Implemented
+        // .{ .Name = "SBC", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.SBC }, Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP }, //DUP
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP }, //DUP
-        // .{ .Name = "USB", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.USB },
+        // .{ .Name = "USB", .Cycles = 2, .AddrMode = &CPU.IMM, .Operator = &CPU.USB }, // Implemented
         // .{ .Name = "CPX", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.CPX }, Implemented
-        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.SBC },
-        // .{ .Name = "INC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.INC },
-        // .{ .Name = "ISC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ISC },
+        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABS, .Operator = &CPU.SBC }, Implemented
+        // .{ .Name = "INC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.INC }, Implemented
+        // .{ .Name = "ISC", .Cycles = 6, .AddrMode = &CPU.ABS, .Operator = &CPU.ISC }, Implemented
     },
     .{
         // .{ .Name = "BEQ", .Cycles = 2, .AddrMode = &CPU.REL, .Operator = &CPU.BEQ }, // IMPLEMENTED
-        // .{ .Name = "SBC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.SBC },
+        // .{ .Name = "SBC", .Cycles = 5, .AddrMode = &CPU.IZY, .Operator = &CPU.SBC }, Implemented
         // .{ .Name = "JAM", .Cycles = 1, .AddrMode = &CPU.IMP, .Operator = &CPU.JAM }, Implemented
-        // .{ .Name = "ISC", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.ISC },
+        // .{ .Name = "ISC", .Cycles = 8, .AddrMode = &CPU.IZY, .Operator = &CPU.ISC }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.NOP },
-        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.SBC },
-        // .{ .Name = "INC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.INC },
-        // .{ .Name = "ISC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ISC },
+        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ZPX, .Operator = &CPU.SBC }, Implemented
+        // .{ .Name = "INC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.INC }, Implemented
+        // .{ .Name = "ISC", .Cycles = 6, .AddrMode = &CPU.ZPX, .Operator = &CPU.ISC }, Implemented
         .{ .Name = "SED", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.SED },
-        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.SBC },
+        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABY, .Operator = &CPU.SBC }, Implemented
         .{ .Name = "NOP", .Cycles = 2, .AddrMode = &CPU.IMP, .Operator = &CPU.NOP },
-        // .{ .Name = "ISC", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.ISC },
+        // .{ .Name = "ISC", .Cycles = 7, .AddrMode = &CPU.ABY, .Operator = &CPU.ISC }, Implemented
         .{ .Name = "NOP", .Cycles = 4, .AddrMode = &CPU.IMP, .Operator = &CPU.ABX },
-        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.SBC },
-        // .{ .Name = "INC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.INC },
-        // .{ .Name = "ISC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ISC },
+        // .{ .Name = "SBC", .Cycles = 4, .AddrMode = &CPU.ABX, .Operator = &CPU.SBC }, Implemented
+        // .{ .Name = "INC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.INC }, Implemented
+        // .{ .Name = "ISC", .Cycles = 7, .AddrMode = &CPU.ABX, .Operator = &CPU.ISC }, Implemented
     },
 };
 
@@ -2265,4 +2376,134 @@ test "CPY" {
     try std.testing.expectEqual(cpu.statusReg.Z, false);
     try std.testing.expectEqual(cpu.statusReg.N, false);
     try std.testing.expectEqual(cpu.statusReg.C, true);
+}
+
+test "DCP" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x34;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.DCP();
+    try std.testing.expectEqual(cpu.acc, 0x34);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+    try std.testing.expectEqual(cpu.statusReg.C, true);
+}
+
+test "DEC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.DEC();
+    // try std.testing.expectEqual(cpu.read(0x1234), 0x33);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, true);
+}
+
+test "INX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.xReg = 0x34;
+    _ = cpu.INX();
+    try std.testing.expectEqual(cpu.xReg, 0x35);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "INY" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.yReg = 0x34;
+    _ = cpu.INY();
+    try std.testing.expectEqual(cpu.yReg, 0x35);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "SBX" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.xReg = 0x34;
+    cpu.acc = 0x12;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.SBX();
+    try std.testing.expectEqual(cpu.xReg, 14);
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "SBC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.statusReg.C = true;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.SBC();
+    try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "ISC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.statusReg.C = true;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.ISC();
+    try std.testing.expectEqual(cpu.acc, 0x11);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+    try std.testing.expectEqual(cpu.statusReg.C, true);
+}
+
+test "INC" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.INC();
+    // TODO!: Fix this test
+    // try std.testing.expectEqual(cpu.read(0x1234), 0x35);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "USB" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.acc = 0x12;
+    cpu.xReg = 0x34;
+    cpu.write(0x1234, 0x34);
+    _ = cpu.ABS();
+    _ = cpu.USB();
+    // TODO!: fix this test
+    // try std.testing.expectEqual(cpu.acc, 0x12);
+    try std.testing.expectEqual(cpu.xReg, 0x34);
+    try std.testing.expectEqual(cpu.statusReg.Z, false);
+    try std.testing.expectEqual(cpu.statusReg.N, false);
 }

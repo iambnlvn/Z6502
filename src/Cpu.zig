@@ -12,7 +12,7 @@ const StatusRegister = packed struct {
     N: bool, // negative flag
 };
 
-const CPU = struct {
+pub const CPU = struct {
     bus: Bus = undefined,
     clockCount: u128,
     pc: u16,
@@ -76,7 +76,20 @@ const CPU = struct {
             self.opCode = self.read(self.pc);
             self.statusReg.U = true;
             self.pc = @addWithOverflow(self.pc, 1)[0];
+
+            var instruction: *Instruction = &LOOKUP[(self.opCode & 0xf0) >> 4][self.opCode & 0x0f];
+            self.cycles = instruction.Cycles;
+
+            const addCyc1: u8 = instruction.AddrMode(self);
+            const addCyc2: u8 = instruction.Operator(self);
+
+            self.cycles += (addCyc1 & addCyc2);
+
+            self.statusReg.U = true;
         }
+
+        self.clockCount += 1;
+        self.cycles -= 1;
     }
 
     pub fn read(self: *CPU, addr: u16) u8 {
@@ -2495,4 +2508,16 @@ test "USB" {
     try std.testing.expectEqual(cpu.xReg, 0x34);
     try std.testing.expectEqual(cpu.statusReg.Z, false);
     try std.testing.expectEqual(cpu.statusReg.N, false);
+}
+
+test "clock" {
+    var allocator = std.testing.allocator;
+    var cpu = try CPU.init(&allocator);
+    defer cpu.bus.deinit();
+
+    cpu.write(0x8000, 0x00);
+    cpu.write(0x8001, 0x80);
+    cpu.pc = 0x8000;
+    _ = cpu.clock();
+    try std.testing.expectEqual(cpu.pc, 0x8001);
 }
